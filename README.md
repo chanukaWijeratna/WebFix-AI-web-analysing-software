@@ -1,70 +1,96 @@
-# Getting Started with Create React App
+# WebFix AI — Web Analysis & Optimisation Tool
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+WebFix AI is an AI-powered web analysis tool that audits any public webpage and delivers detailed insights across five key dimensions: SEO structure, messaging clarity, call-to-action usage, content depth, and UX & structure. It then generates prioritised, actionable recommendations to help improve the site.
 
-## Available Scripts
+## How It Works
 
-In the project directory, you can run:
+1. Enter a URL in the interface
+2. The webscraper (Puppeteer) visits the page and collects structural metrics
+3. The analysis backend (Flask + LLM) evaluates the scraped data across five categories and scores each one out of 100
+4. Results and recommendations are displayed in the UI and saved locally for future reference
 
-### `npm start`
+## Architecture
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+```
+webapp/
+├── public/              # Static assets
+├── src/                 # React frontend
+├── analysis/            # Python Flask backend (LLM analysis engine)
+│   ├── insight_generator.py
+│   ├── llm_client.py
+│   └── recommendations.py
+├── webscraper/          # Node.js scraper (Puppeteer + Express)
+│   ├── server.js
+│   └── scraper.js
+├── saved_analyses/      # Persisted audit results (auto-created)
+├── requirements.txt     # Python dependencies
+├── setup.bat            # One-time setup script
+└── start.bat            # Launch all services
+```
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+| Service      | Technology         | Port  |
+|--------------|--------------------|-------|
+| Frontend     | React              | 3000  |
+| Analysis API | Python / Flask     | 5000  |
+| Scraper API  | Node.js / Express  | 3001  |
 
-### `npm test`
+## Prerequisites
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+- [Python 3.9+](https://www.python.org/downloads/)
+- [Node.js 18+](https://nodejs.org/)
+- An OpenAI-compatible API key and endpoint
 
-### `npm run build`
+## Setup
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+### 1. Clone the repository
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+```bash
+git clone https://github.com/chanukaWijeratna/WebFix-AI-web-analysing-software.git
+cd WebFix-AI-web-analysing-software
+```
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+### 2. Configure environment variables
 
-### `npm run eject`
+```bash
+cp .env.example .env
+```
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+Open `.env` and fill in your values:
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+```env
+API_URL=          # Your OpenAI-compatible API endpoint
+API_KEY=          # Your API key
+INSIGHT_MODEL=    # Model to use for page analysis | RECOMENDED : "google/gemini-3.1-flash-lite-preview"
+RECOMMENDATIONS_MODEL=  # Model to use for recommendations | RECOMENDED : "anthropic/claude-haiku-4-5"
+```
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+### 3. Run setup
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+Double-click `setup.bat` or run it from the terminal:
 
-## Learn More
+```bash
+setup.bat
+```
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+This will:
+- Create a Python virtual environment (`venv/`)
+- Install Python packages from `requirements.txt`
+- Install Node packages for the frontend and webscraper
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+## Running the App
 
-### Code Splitting
+Double-click `start.bat` or run it from the terminal:
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+```bash
+start.bat
+```
 
-### Analyzing the Bundle Size
+This opens three terminal windows — one for each service. Once all three are running, open your browser at [http://localhost:3000](http://localhost:3000).
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+## Features
 
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+- **5-category scoring** — SEO, messaging, CTAs, content depth, UX & structure, each scored 0–100
+- **Data-grounded insights** — every finding cites specific measured values from the page
+- **Prioritised recommendations** — 3–5 actionable fixes ranked by impact
+- **Audit history** — past analyses are saved and can be reviewed or deleted from the UI
+- **Prompt logs** — raw LLM prompts and outputs are visible for transparency
