@@ -1,2 +1,5 @@
 node_modules
 start.bat
+.env
+webscraper/scrape_data/
+venv/
