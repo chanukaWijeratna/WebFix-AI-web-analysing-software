@@ -1,11 +1,15 @@
 import json
 import os
 import requests
-from dotenv import load_dotenv, find_dotenv
+from pathlib import Path
+from dotenv import load_dotenv
+
+WEBAPP_DIR = Path(__file__).resolve().parent.parent
+ENV_PATH = WEBAPP_DIR / '.env'
 
 
 def call_llm(prompt, system_prompt, call_name, logs, model_env_key, api_url_env_key='API_URL', api_key_env_key='API_KEY'):
-    load_dotenv(find_dotenv(), override=True)
+    load_dotenv(ENV_PATH, override=True)
     model = os.getenv(model_env_key)
     api_url = os.getenv(api_url_env_key)
     api_key = os.getenv(api_key_env_key)
