@@ -1,20 +1,35 @@
 import json
 import os
+import shutil
+from datetime import datetime
+from pathlib import Path
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from dotenv import load_dotenv
-from pathlib import Path
-import requests
+from llm_client import call_llm
 from recommendations import generate_recommendations
 
-load_dotenv(Path(__file__).parent / '.env')
+SAVES_DIR = Path(__file__).resolve().parent.parent / 'saved_analyses'
+
+
+def save_analysis(scrape_data, insights, recommendations):
+    timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+    folder = SAVES_DIR / timestamp
+    folder.mkdir(parents=True, exist_ok=True)
+
+    (folder / 'scrape_data.json').write_text(
+        json.dumps(scrape_data, indent=2), encoding='utf-8'
+    )
+    (folder / 'insights.json').write_text(
+        json.dumps(insights, indent=2), encoding='utf-8'
+    )
+    (folder / 'recommendations.json').write_text(
+        json.dumps(recommendations, indent=2), encoding='utf-8'
+    )
 
 app = Flask(__name__)
 CORS(app)
 
-API_KEY = os.getenv('API_KEY')
-API_URL = 'https://openrouter.ai/api/v1/chat/completions'
-MODEL = 'google/gemini-3.1-flash-lite-preview'
+SYSTEM_PROMPT = 'You are a web analysis expert. Always respond with valid JSON only. No markdown, no explanation, no extra text.'
 
 INSIGHT_FORMAT = """Respond with ONLY a valid JSON object (no markdown, no extra text) in this exact format:
 {
@@ -29,30 +44,7 @@ INSIGHT_FORMAT = """Respond with ONLY a valid JSON object (no markdown, no extra
 IMPORTANT: Every summary sentence, issue, and strength MUST cite specific numbers or values from the data. Never write vague statements — always include the actual measured value."""
 
 
-def call_llm(prompt):
-    headers = {
-        'Authorization': f'Bearer {API_KEY}',
-        'Content-Type': 'application/json',
-    }
-    payload = {
-        'model': MODEL,
-        'messages': [
-            {'role': 'system', 'content': 'You are a web analysis expert. Always respond with valid JSON only. No markdown, no explanation, no extra text.'},
-            {'role': 'user', 'content': prompt}
-        ],
-        'temperature': 0.3,
-        'max_tokens': 1200,
-    }
-    response = requests.post(API_URL, headers=headers, json=payload, timeout=90)
-    response.raise_for_status()
-    content = response.json()['choices'][0]['message']['content'].strip()
-    if content.startswith('```'):
-        content = content.split('\n', 1)[1] if '\n' in content else content[3:]
-        content = content.rsplit('```', 1)[0]
-    return json.loads(content)
-
-
-def analyze_seo_structure(data):
+def analyze_seo_structure(data, logs):
     fields = {
         'url': data.get('url'),
         'metaTitle': data.get('metaTitle'),
@@ -78,14 +70,14 @@ Evaluate: meta tags completeness, heading hierarchy, Open Graph/Twitter cards, s
 Data:
 {json.dumps(fields, indent=2)}
 
-"##MISSING##" means the element was not found on the page — flag it as a problem if important.
-Quote specific values from the data above in every finding (e.g. actual tag content, presence/absence of fields, status code value).
+An empty string ("") means the element was not found on the page — flag it as a problem if important.
+Quote specific values from the data above in every finding (e.g. actual tag content, presence/absence of fields, status code value). Treat any empty string ("") as meaning the element does not exist on the page.
 
 {INSIGHT_FORMAT}"""
-    return call_llm(prompt)
+    return call_llm(prompt, SYSTEM_PROMPT, 'analyze_seo_structure', logs, 'INSIGHT_MODEL')
 
 
-def analyze_messaging_clarity(data):
+def analyze_messaging_clarity(data, logs):
     fields = {
         'metaTitle': data.get('metaTitle'),
         'metaDescription': data.get('metaDescription'),
@@ -103,14 +95,14 @@ Evaluate: whether headings clearly communicate purpose, if meta title/descriptio
 Data:
 {json.dumps(fields, indent=2)}
 
-"##MISSING##" means the element was not found on the page.
-Quote specific values from the data above in every finding (e.g. actual heading text, word count, top keywords, meta description content).
+An empty string ("") means the element was not found on the page.
+Quote specific values from the data above in every finding (e.g. actual heading text, word count, top keywords, meta description content). Treat any empty string ("") as meaning the element does not exist on the page.
 
 {INSIGHT_FORMAT}"""
-    return call_llm(prompt)
+    return call_llm(prompt, SYSTEM_PROMPT, 'analyze_messaging_clarity', logs, 'INSIGHT_MODEL')
 
 
-def analyze_cta_usage(data):
+def analyze_cta_usage(data, logs):
     fields = {
         'ctaCount': data.get('ctaCount'),
         'internalLinks': data.get('links', {}).get('internal'),
@@ -128,14 +120,14 @@ Evaluate: number of CTAs relative to content length, CTA-to-content ratio, forms
 Data:
 {json.dumps(fields, indent=2)}
 
-"##MISSING##" means the element was not found on the page.
-Quote specific values from the data above in every finding (e.g. exact CTA count, link counts, form count, word count).
+An empty string ("") means the element was not found on the page.
+Quote specific values from the data above in every finding (e.g. exact CTA count, link counts, form count, word count). Treat any empty string ("") as meaning the element does not exist on the page.
 
 {INSIGHT_FORMAT}"""
-    return call_llm(prompt)
+    return call_llm(prompt, SYSTEM_PROMPT, 'analyze_cta_usage', logs, 'INSIGHT_MODEL')
 
 
-def analyze_content_depth(data):
+def analyze_content_depth(data, logs):
     fields = {
         'totalWordCount': data.get('totalWordCount'),
         'contentLength': data.get('contentLength'),
@@ -157,14 +149,14 @@ Evaluate: word count adequacy, content-to-heading ratio, keyword diversity, mult
 Data:
 {json.dumps(fields, indent=2)}
 
-"##MISSING##" means the element was not found on the page.
-Quote specific values from the data above in every finding (e.g. exact word count, image count, missing alt %, heading counts, top keywords).
+An empty string ("") means the element was not found on the page.
+Quote specific values from the data above in every finding (e.g. exact word count, image count, missing alt %, heading counts, top keywords). Treat any empty string ("") as meaning the element does not exist on the page.
 
 {INSIGHT_FORMAT}"""
-    return call_llm(prompt)
+    return call_llm(prompt, SYSTEM_PROMPT, 'analyze_content_depth', logs, 'INSIGHT_MODEL')
 
 
-def analyze_ux_structure(data):
+def analyze_ux_structure(data, logs):
     fields = {
         'domElementCount': data.get('domElementCount'),
         'inlineStylesCount': data.get('inlineStylesCount'),
@@ -189,11 +181,62 @@ Evaluate: page load performance, DOM complexity, mobile responsiveness (viewport
 Data:
 {json.dumps(fields, indent=2)}
 
-"##MISSING##" means the element was not found on the page.
-Quote specific values from the data above in every finding (e.g. exact load time in ms, DOM element count, ARIA counts, inline style count, unlabelled input count).
+An empty string ("") means the element was not found on the page.
+Quote specific values from the data above in every finding (e.g. exact load time in ms, DOM element count, ARIA counts, inline style count, unlabelled input count). Treat any empty string ("") as meaning the element does not exist on the page.
 
 {INSIGHT_FORMAT}"""
-    return call_llm(prompt)
+    return call_llm(prompt, SYSTEM_PROMPT, 'analyze_ux_structure', logs, 'INSIGHT_MODEL')
+
+
+@app.route('/history', methods=['GET'])
+def list_history():
+    if not SAVES_DIR.exists():
+        return jsonify([])
+    entries = []
+    for folder in sorted(SAVES_DIR.iterdir(), reverse=True):
+        if not folder.is_dir():
+            continue
+        try:
+            scrape = json.loads((folder / 'scrape_data.json').read_text(encoding='utf-8'))
+            insights = json.loads((folder / 'insights.json').read_text(encoding='utf-8'))
+            scores = {k: insights[k]['score'] for k in ('seo_structure', 'messaging_clarity', 'cta_usage', 'content_depth', 'ux_structure') if k in insights}
+            entries.append({
+                'timestamp': folder.name,
+                'url': scrape.get('url', ''),
+                'scores': scores,
+                'wordCount': scrape.get('totalWordCount'),
+                'loadTimeMs': scrape.get('loadTimeMs'),
+            })
+        except Exception:
+            continue
+    return jsonify(entries)
+
+
+@app.route('/history/<timestamp>', methods=['DELETE'])
+def delete_history(timestamp):
+    folder = SAVES_DIR / timestamp
+    if not folder.exists():
+        return jsonify({'error': 'Not found'}), 404
+    try:
+        shutil.rmtree(folder)
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/history/<timestamp>', methods=['GET'])
+def get_history(timestamp):
+    folder = SAVES_DIR / timestamp
+    if not folder.exists():
+        return jsonify({'error': 'Not found'}), 404
+    try:
+        scrape = json.loads((folder / 'scrape_data.json').read_text(encoding='utf-8'))
+        insights = json.loads((folder / 'insights.json').read_text(encoding='utf-8'))
+        recommendations = json.loads((folder / 'recommendations.json').read_text(encoding='utf-8'))
+        insights['recommendations'] = recommendations
+        return jsonify({'scrape': scrape, 'insights': insights})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/analyze', methods=['POST'])
@@ -201,6 +244,8 @@ def analyze():
     data = request.json
     if not data:
         return jsonify({'error': 'No data provided'}), 400
+
+    logs = []
 
     analyses = {
         'seo_structure': analyze_seo_structure,
@@ -213,7 +258,7 @@ def analyze():
     results = {}
     for key, fn in analyses.items():
         try:
-            results[key] = fn(data)
+            results[key] = fn(data, logs)
         except Exception as e:
             results[key] = {
                 'score': 0,
@@ -223,9 +268,17 @@ def analyze():
             }
 
     try:
-        results['recommendations'] = generate_recommendations(results)
+        results['recommendations'] = generate_recommendations(results, logs)
     except Exception as e:
         results['recommendations'] = []
+
+    results['prompt_logs'] = logs
+
+    insights_only = {k: results[k] for k in ('seo_structure', 'messaging_clarity', 'cta_usage', 'content_depth', 'ux_structure') if k in results}
+    try:
+        save_analysis(data, insights_only, results.get('recommendations', []))
+    except Exception as e:
+        print(f'[save_analysis error] {e}')
 
     return jsonify(results)
 

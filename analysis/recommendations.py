@@ -1,17 +1,9 @@
-import json
-import os
-import requests
-from dotenv import load_dotenv
-from pathlib import Path
+from llm_client import call_llm
 
-load_dotenv(Path(__file__).parent / '.env')
-
-API_KEY = os.getenv('API_KEY')
-API_URL = 'https://openrouter.ai/api/v1/chat/completions'
-MODEL = 'google/gemini-3.1-flash-lite-preview'
+SYSTEM_PROMPT = 'You are a web optimisation expert. Always respond with valid JSON only. No markdown, no explanation, no extra text.'
 
 
-def generate_recommendations(insights):
+def generate_recommendations(insights, logs):
     summary_block = ''
     for key, title in [
         ('seo_structure', 'SEO Structure'),
@@ -39,37 +31,19 @@ def generate_recommendations(insights):
 
 {summary_block}
 
-Focus on the highest-impact improvements. Each recommendation must be specific and reference actual findings from the analysis above.
+Each recommendation MUST: (1) cite the specific metric values from the analysis above, (2) explain clearly why that metric is a problem and what negative impact it has, and (3) state the exact fix. Do not generalise — every description must read like: "X was found to be Y, which causes Z — to fix this, do W."
 
 Respond with ONLY a valid JSON object (no markdown, no extra text) in this exact format:
 {{
   "recommendations": [
     {{
       "title": "<short title, max 8 words>",
-      "description": "<2-3 sentences explaining what to do and why, citing specific metrics or issues from the analysis>",
+      "description": "<2-3 sentences that quote specific values from the analysis above, explain why it matters, and state the exact fix>",
       "priority": "high|medium|low",
       "category": "<SEO|Messaging|CTA|Content|UX>"
     }}
   ]
 }}"""
 
-    headers = {
-        'Authorization': f'Bearer {API_KEY}',
-        'Content-Type': 'application/json',
-    }
-    payload = {
-        'model': MODEL,
-        'messages': [
-            {'role': 'system', 'content': 'You are a web optimisation expert. Always respond with valid JSON only. No markdown, no explanation, no extra text.'},
-            {'role': 'user', 'content': prompt}
-        ],
-        'temperature': 0.3,
-        'max_tokens': 1200,
-    }
-    response = requests.post(API_URL, headers=headers, json=payload, timeout=90)
-    response.raise_for_status()
-    content = response.json()['choices'][0]['message']['content'].strip()
-    if content.startswith('```'):
-        content = content.split('\n', 1)[1] if '\n' in content else content[3:]
-        content = content.rsplit('```', 1)[0]
-    return json.loads(content).get('recommendations', [])
+    result = call_llm(prompt, SYSTEM_PROMPT, 'generate_recommendations', logs, 'RECOMMENDATIONS_MODEL')
+    return result.get('recommendations', [])

@@ -1,5 +1,6 @@
 node_modules
 start.bat
 .env
-webscraper/scrape_data/
+saved_analyses/
 venv/
+__pycache__/
