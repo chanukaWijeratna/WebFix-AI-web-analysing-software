@@ -1,5 +1,4 @@
 node_modules
-start.bat
 .env
 saved_analyses/
 venv/
