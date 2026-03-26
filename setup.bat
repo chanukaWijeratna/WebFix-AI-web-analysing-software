@@ -28,7 +28,9 @@ echo Done.
 :: Install frontend Node dependencies
 echo.
 echo [3/4] Installing frontend Node packages...
-call npm install --prefix "%ROOT%"
+pushd "%ROOT%."
+call npm install
+popd
 if errorlevel 1 (
     echo ERROR: Failed to install frontend Node packages.
     pause
@@ -39,7 +41,9 @@ echo Done.
 :: Install webscraper Node dependencies
 echo.
 echo [4/4] Installing webscraper Node packages...
-call npm install --prefix "%ROOT%webscraper"
+pushd "%ROOT%webscraper"
+call npm install
+popd
 if errorlevel 1 (
     echo ERROR: Failed to install webscraper Node packages.
     pause
