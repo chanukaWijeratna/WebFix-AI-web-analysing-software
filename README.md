@@ -75,12 +75,12 @@ webapp/
 - [Node.js 18+](https://nodejs.org/)
 - An OpenAI-compatible API key and endpoint
 
-## Setup
+## Setup (Windows, Mac users may have to do manual setup)
 
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/chanukaWijeratna/WebFix-AI-web-analysing-software.git
+git clone https://github.com/chanukaWijeratna/WebFix-AI-web-audit-tool.git
 cd WebFix-AI-web-analysing-software
 ```
 
