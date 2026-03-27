@@ -9,7 +9,13 @@ WebFix AI is an AI-powered web analysis tool that audits any public webpage and 
 3. The analysis backend (Flask + LLM) evaluates the scraped data across five categories and scores each one out of 100
 4. Results and recommendations are displayed in the UI and saved locally for future reference
 
-## Architecture
+## Architecture Overview
+
+The system is split into three independent services that communicate over HTTP:
+
+- **React frontend** — handles user input, renders scored results, and manages audit history via a local JSON store.
+- **Node.js / Puppeteer scraper** — visits the target URL in a headless browser and extracts structural metrics (headings, links, meta tags, CTA elements, word count, etc.). Running this as a separate service keeps browser automation isolated from the Python process and makes it easy to scale or swap independently.
+- **Python / Flask analysis backend** — receives the scraped data and calls an LLM twice: once to generate per-category insights and scores, and once to produce prioritised recommendations. Separating these two LLM calls allows different models (and different prompts) to be used for each task.
 
 ```
 webapp/
@@ -33,6 +39,35 @@ webapp/
 | Frontend     | React              | 3000  |
 | Analysis API | Python / Flask     | 5000  |
 | Scraper API  | Node.js / Express  | 3001  |
+
+## AI Design Decisions
+
+**Two-model pipeline** — Insight generation and recommendation generation are handled by separate LLM calls (and can use separate models). Insights need broad analytical reasoning; recommendations need concise, ranked output. Splitting the calls makes each prompt simpler and lets you tune models independently for cost vs. quality.
+
+**Data-grounded prompting** — Rather than passing raw HTML to the LLM, the scraper first reduces the page to a structured JSON of metrics (heading counts, CTA text, word count, meta description length, etc.). The analysis prompt instructs the model to cite these measured values in every finding. This reduces hallucination and makes outputs auditable.
+
+**OpenAI-compatible API abstraction** — `llm_client.py` targets any OpenAI-compatible endpoint, so the tool works with OpenAI, Anthropic (via proxy), Google, or local models without code changes — just swap the `.env` values.
+
+**Scoring rubric in the system prompt** — Each of the five categories has an explicit 0–100 scoring rubric baked into the prompt. Without a rubric, LLM scores drift and are not comparable across runs.
+
+## Trade-offs
+
+| Decision | Upside | Downside |
+|---|---|---|
+| Two sequential LLM calls | Cleaner prompts, tunable per task | Higher latency and cost vs. a single call |
+| Scrape → structured JSON → LLM (not raw HTML) | Reduces token usage and hallucination | Some page context (visual layout, images) is lost |
+| File-based audit history (`saved_analyses/`) | Zero infrastructure, works offline | Not suitable for multi-user or cloud deployment |
+| Three separate local services | Each service is independently restartable and replaceable | More setup friction; requires three terminal processes |
+| Headless Puppeteer for scraping | Handles JS-rendered pages | Slower than a simple HTTP fetch; blocked by some anti-bot measures |
+
+## What I Would Improve With More Time
+
+- **Authentication & multi-tenancy** — add user accounts so audit history is per-user and the tool can be deployed as a shared SaaS.
+- **Queue-based analysis** — replace the synchronous request/response flow with a job queue (e.g. Redis + Celery) so the frontend can poll for results and long-running analyses don't time out.
+- **Diff / trend view** — store multiple audits per domain and surface score changes over time so users can track improvement.
+- **Richer scraping** — capture Lighthouse performance scores, Core Web Vitals, and accessibility violations alongside the current structural metrics.
+- **Streaming LLM responses** — stream tokens to the UI so users see insights appear progressively rather than waiting for the full response.
+- **Automated tests** — add unit tests for the scoring logic and prompt templates, and integration tests that run against a local mock page to prevent regressions.
 
 ## Prerequisites
 
